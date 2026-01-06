@@ -651,7 +651,41 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     memory: process.memoryUsage(),
-    version: process.version
+    version: process.version,
+    environment: process.env.NODE_ENV || 'development',
+    pid: process.pid
+  });
+});
+
+// 服务器信息接口
+app.get('/info', (req, res) => {
+  const packageInfo = require('./package.json');
+  
+  res.json({
+    name: packageInfo.name,
+    version: packageInfo.version,
+    description: packageInfo.description,
+    environment: process.env.NODE_ENV || 'development',
+    port: PORT,
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    nodeVersion: process.version,
+    pid: process.pid,
+    platform: process.platform,
+    arch: process.arch,
+    directories: {
+      uploads: uploadsDir,
+      feedback: feedbackDir,
+      templates: templatesDir
+    },
+    features: [
+      '文件上传下载',
+      '反馈数据管理',
+      '模板数据管理',
+      'PM2集群部署',
+      'Excel数据导出',
+      'JSON模板编辑'
+    ]
   });
 });
 
