@@ -85,6 +85,14 @@ pm2 status
 # 查看日志
 pm2 logs file-server
 
+# 健康检查
+访问 http://localhost:3001/health
+
+# 启动服务（windows不支持）
+pm2 startup
+# 保存当前PM2配置，再手动重启 （Windows启动方式）
+pm2 save
+
 # 重启服务
 pm2 restart file-server
 
@@ -355,5 +363,5 @@ pm2 restart all
 pm2 flush
 
 # 重新加载配置
-pm2 reload ecosystem.config.js
+pm2   ecosystem.config.js
 ```

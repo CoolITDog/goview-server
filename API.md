@@ -22,12 +22,11 @@
 9. [查看特定日期的反馈数据](#9-查看特定日期的反馈数据) - `GET /feedback/view/:date`
 
 ### 模板管理
-10. [保存模板](#10-保存模板) - `POST /template`
+10. [保存/更新模板](#10-保存更新模板) - `POST /template`
 11. [获取模板列表](#11-获取模板列表) - `GET /template/list`
 12. [根据ID获取模板数据](#12-根据id获取模板数据) - `GET /template/:id`
-13. [编辑模板数据](#13-编辑模板数据) - `PUT /template/:id`
-14. [修改模板名称](#14-修改模板名称) - `PATCH /template/:id/name`
-15. [删除模板](#15-删除模板) - `DELETE /template/:id`
+13. [修改模板名称](#13-修改模板名称) - `PATCH /template/:id/name`
+14. [删除模板](#14-删除模板) - `DELETE /template/:id`
 
 ### 系统管理
 16. [健康检查](#16-健康检查) - `GET /health`
@@ -480,17 +479,19 @@ fetch('http://localhost:3001/feedback/view/20260106')
 }
 ```
 
-### 10. 保存模板
+### 10. 保存/更新模板
 
 **接口地址**: `POST /template`
+
+**功能说明**: 统一的模板保存和更新接口。根据本地是否存在对应 ID 的模板文件来决定是新增还是更新模板。
 
 **请求参数**:
 | 参数名 | 类型 | 必填 | 说明 |
 |--------|------|------|------|
-| templateData | Object/String | 是 | 模板数据（JSON格式，大小限制1MB） |
-| templateName | String | 否 | 模板名称（可选，不填则自动生成） |
+| templateData | Object/String | 是 | 模板数据（JSON格式，大小限制1MB）。**必须包含 `id` 字段** |
+| templateName | String | 否 | 模板名称（可选，不填则自动生成或保持原名称） |
 
-**请求示例**:
+**新增模板示例**:
 ```bash
 curl -X POST \
   http://localhost:3001/template \
@@ -498,6 +499,7 @@ curl -X POST \
   -d '{
     "templateName": "用户配置模板",
     "templateData": {
+      "id": "my-template-001",
       "name": "示例模板",
       "version": "1.0.0",
       "config": {
@@ -508,9 +510,30 @@ curl -X POST \
   }'
 ```
 
+**更新模板示例**:
+```bash
+curl -X POST \
+  http://localhost:3001/template \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "templateName": "更新的配置模板",
+    "templateData": {
+      "id": "my-template-001",
+      "name": "更新的模板",
+      "version": "2.0.0",
+      "config": {
+        "theme": "dark",
+        "layout": "list"
+      }
+    }
+  }'
+```
+
 **JavaScript 示例**:
 ```javascript
-const templateData = {
+// 新增模板（本地不存在 my-template-001.json 文件）
+const newTemplateData = {
+  id: "my-template-001", // 必须包含 id
   name: "示例模板",
   version: "1.0.0",
   config: {
@@ -526,23 +549,71 @@ fetch('http://localhost:3001/template', {
   },
   body: JSON.stringify({
     templateName: "用户配置模板",
-    templateData: templateData
+    templateData: newTemplateData
+  })
+})
+.then(response => response.json())
+.then(data => console.log(data));
+
+// 更新模板（本地存在 my-template-001.json 文件）
+const updateTemplateData = {
+  id: "my-template-001", // 相同的 id
+  name: "更新的模板",
+  version: "2.0.0",
+  config: {
+    theme: "dark",
+    layout: "list"
+  }
+};
+
+fetch('http://localhost:3001/template', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    templateName: "更新的配置模板",
+    templateData: updateTemplateData
   })
 })
 .then(response => response.json())
 .then(data => console.log(data));
 ```
 
-**成功响应**:
+**新增模板成功响应**:
 ```json
 {
   "message": "模板保存成功",
   "template": {
-    "id": "1641024000000abc123def",
+    "id": "my-template-001",
     "name": "用户配置模板",
     "createTime": "2026-01-06T08:00:00.000Z",
+    "updateTime": "2026-01-06T08:00:00.000Z",
     "size": 256
-  }
+  },
+  "action": "create"
+}
+```
+
+**更新模板成功响应**:
+```json
+{
+  "message": "模板更新成功",
+  "template": {
+    "id": "my-template-001",
+    "name": "更新的配置模板",
+    "createTime": "2026-01-06T08:00:00.000Z",
+    "updateTime": "2026-01-06T09:00:00.000Z",
+    "size": 280
+  },
+  "action": "update"
+}
+```
+
+**错误响应**:
+```json
+{
+  "error": "模板数据必须包含id字段"
 }
 ```
 
@@ -605,47 +676,7 @@ curl -X GET http://localhost:3001/template/1641024000000abc123def
 }
 ```
 
-### 13. 编辑模板数据
-
-**接口地址**: `PUT /template/:id`
-
-**请求参数**:
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| id | String | 是 | 模板ID（路径参数） |
-| templateData | Object/String | 是 | 新的模板数据（JSON格式） |
-
-**请求示例**:
-```bash
-curl -X PUT \
-  http://localhost:3001/template/1641024000000abc123def \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "templateData": {
-      "name": "更新的模板",
-      "version": "2.0.0",
-      "config": {
-        "theme": "dark",
-        "layout": "list"
-      }
-    }
-  }'
-```
-
-**成功响应**:
-```json
-{
-  "message": "模板更新成功",
-  "template": {
-    "id": "1641024000000abc123def",
-    "name": "用户配置模板",
-    "updateTime": "2026-01-06T09:00:00.000Z",
-    "size": 280
-  }
-}
-```
-
-### 14. 修改模板名称
+### 13. 修改模板名称
 
 **接口地址**: `PATCH /template/:id/name`
 
@@ -677,7 +708,7 @@ curl -X PATCH \
 }
 ```
 
-### 15. 删除模板
+### 14. 删除模板
 
 **接口地址**: `DELETE /template/:id`
 
@@ -698,7 +729,7 @@ curl -X DELETE http://localhost:3001/template/1641024000000abc123def
 }
 ```
 
-### 16. 健康检查
+### 15. 健康检查
 
 **接口地址**: `GET /health`
 
@@ -825,7 +856,7 @@ class FileUploadClient {
   }
 
   // 模板管理相关方法
-  async saveTemplate(templateData, templateName) {
+  async saveOrUpdateTemplate(templateData, templateName) {
     const response = await fetch(`${this.baseUrl}/template`, {
       method: 'POST',
       headers: {
@@ -851,12 +882,16 @@ class FileUploadClient {
   }
 
   async updateTemplate(id, templateData) {
-    const response = await fetch(`${this.baseUrl}/template/${id}`, {
-      method: 'PUT',
+    // 注意：现在使用统一的 POST /template 接口
+    // templateData 必须包含 id 字段，接口会根据本地文件是否存在来判断新增还是更新
+    const dataWithId = { ...templateData, id };
+    
+    const response = await fetch(`${this.baseUrl}/template`, {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ templateData })
+      body: JSON.stringify({ templateData: dataWithId })
     });
     
     return response.json();
@@ -892,9 +927,13 @@ await client.submitFeedback('系统建议', '希望增加批量上传功能');
 // 获取反馈列表
 const feedbackList = await client.getFeedbackList();
 
-// 保存模板
-const templateData = { name: "示例", config: { theme: "default" } };
-await client.saveTemplate(templateData, "我的模板");
+// 保存新模板（本地不存在对应ID的文件）
+const templateData = { id: "my-template-001", name: "示例", config: { theme: "default" } };
+await client.saveOrUpdateTemplate(templateData, "我的模板");
+
+// 更新现有模板（本地存在对应ID的文件）
+const existingTemplateData = { id: "my-template-001", name: "更新的示例", config: { theme: "dark" } };
+await client.saveOrUpdateTemplate(existingTemplateData, "更新的模板名称");
 
 // 获取模板列表
 const templateList = await client.getTemplateList();
@@ -974,8 +1013,8 @@ class FileUploadClient:
         return response.json()
 
     # 模板管理相关方法
-    def save_template(self, template_data: Dict[str, Any], template_name: str = None) -> Dict[str, Any]:
-        """保存模板"""
+    def save_or_update_template(self, template_data: Dict[str, Any], template_name: str = None) -> Dict[str, Any]:
+        """保存或更新模板"""
         data = {'templateData': template_data}
         if template_name:
             data['templateName'] = template_name
@@ -994,8 +1033,11 @@ class FileUploadClient:
 
     def update_template(self, template_id: str, template_data: Dict[str, Any]) -> Dict[str, Any]:
         """更新模板数据"""
-        data = {'templateData': template_data}
-        response = requests.put(f'{self.base_url}/template/{template_id}', json=data)
+        # 注意：现在使用统一的 POST /template 接口
+        # templateData 必须包含 id 字段，接口会根据本地文件是否存在来判断新增还是更新
+        data_with_id = {**template_data, 'id': template_id}
+        data = {'templateData': data_with_id}
+        response = requests.post(f'{self.base_url}/template', json=data)
         return response.json()
 
     def rename_template(self, template_id: str, name: str) -> Dict[str, Any]:
@@ -1018,9 +1060,13 @@ result = client.submit_feedback('系统建议', '希望增加批量上传功能'
 # 获取反馈列表
 feedback_list = client.get_feedback_list()
 
-# 保存模板
-template_data = {'name': '示例', 'config': {'theme': 'default'}}
-result = client.save_template(template_data, '我的模板')
+# 保存新模板（本地不存在对应ID的文件）
+template_data = {'id': 'my-template-001', 'name': '示例', 'config': {'theme': 'default'}}
+result = client.save_or_update_template(template_data, '我的模板')
+
+# 更新现有模板（本地存在对应ID的文件）
+existing_template_data = {'id': 'my-template-001', 'name': '更新的示例', 'config': {'theme': 'dark'}}
+result = client.save_or_update_template(existing_template_data, '更新的模板名称')
 
 # 获取模板列表
 template_list = client.get_template_list()

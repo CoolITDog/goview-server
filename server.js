@@ -10,7 +10,8 @@ const PORT = process.env.PORT || 3000;
 
 // 中间件
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' })); // 增加 JSON 大小限制
+app.use(express.urlencoded({ limit: '50mb', extended: true })); // 增加 URL 编码大小限制
 app.use(express.static('public'));
 
 // 确保uploads、feedback和templates目录存在
@@ -44,7 +45,7 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage,
   limits: {
     fileSize: 10 * 1024 * 1024 // 限制文件大小为10MB
@@ -171,10 +172,10 @@ app.post('/feedback', (req, res) => {
 
     // 获取当前日期，格式：YYYYMMDD
     const now = new Date();
-    const dateStr = now.getFullYear().toString() + 
-                   (now.getMonth() + 1).toString().padStart(2, '0') + 
-                   now.getDate().toString().padStart(2, '0');
-    
+    const dateStr = now.getFullYear().toString() +
+      (now.getMonth() + 1).toString().padStart(2, '0') +
+      now.getDate().toString().padStart(2, '0');
+
     const excelFileName = `feedback_${dateStr}.xlsx`;
     const excelFilePath = path.join(feedbackDir, excelFileName);
 
@@ -227,7 +228,7 @@ app.post('/feedback', (req, res) => {
     // 添加或替换工作表
     const sheetName = `反馈数据_${dateStr}`;
     workbook.Sheets[sheetName] = newWorksheet;
-    
+
     if (workbook.SheetNames.indexOf(sheetName) === -1) {
       workbook.SheetNames = [sheetName];
     }
@@ -260,12 +261,12 @@ app.get('/feedback/list', (req, res) => {
       .map(filename => {
         const filePath = path.join(feedbackDir, filename);
         const stats = fs.statSync(filePath);
-        
+
         // 从文件名提取日期
         const dateMatch = filename.match(/feedback_(\d{8})\.xlsx/);
         const dateStr = dateMatch ? dateMatch[1] : '';
-        const formattedDate = dateStr ? 
-          `${dateStr.substring(0,4)}-${dateStr.substring(4,6)}-${dateStr.substring(6,8)}` : '';
+        const formattedDate = dateStr ?
+          `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}` : '';
 
         // 读取Excel文件获取记录数
         let recordCount = 0;
@@ -301,7 +302,7 @@ app.get('/feedback/list', (req, res) => {
 app.get('/feedback/download/:filename', (req, res) => {
   try {
     const filename = req.params.filename;
-    
+
     // 验证文件名格式
     if (!filename.match(/^feedback_\d{8}\.xlsx$/)) {
       return res.status(400).json({ error: '无效的文件名格式' });
@@ -329,7 +330,7 @@ app.get('/feedback/download/:filename', (req, res) => {
 app.get('/feedback/view/:date', (req, res) => {
   try {
     const date = req.params.date; // 格式：YYYYMMDD
-    
+
     // 验证日期格式
     if (!date.match(/^\d{8}$/)) {
       return res.status(400).json({ error: '日期格式错误，应为YYYYMMDD' });
@@ -339,8 +340,8 @@ app.get('/feedback/view/:date', (req, res) => {
     const filePath = path.join(feedbackDir, filename);
 
     if (!fs.existsSync(filePath)) {
-      return res.json({ 
-        date: `${date.substring(0,4)}-${date.substring(4,6)}-${date.substring(6,8)}`,
+      return res.json({
+        date: `${date.substring(0, 4)}-${date.substring(4, 6)}-${date.substring(6, 8)}`,
         data: [],
         message: '该日期暂无反馈数据'
       });
@@ -353,7 +354,7 @@ app.get('/feedback/view/:date', (req, res) => {
     const data = XLSX.utils.sheet_to_json(worksheet);
 
     res.json({
-      date: `${date.substring(0,4)}-${date.substring(4,6)}-${date.substring(6,8)}`,
+      date: `${date.substring(0, 4)}-${date.substring(4, 6)}-${date.substring(6, 8)}`,
       data: data,
       recordCount: data.length
     });
@@ -365,19 +366,20 @@ app.get('/feedback/view/:date', (req, res) => {
 
 // ==================== 模板管理接口 ====================
 
-// 生成唯一ID的辅助函数
-function generateTemplateId() {
-  return Date.now().toString() + Math.random().toString(36).substr(2, 9);
-}
-
-// 保存模板接口
+// 保存/更新模板接口（统一接口）
 app.post('/template', (req, res) => {
   try {
-    const { templateData, templateName } = req.body;
-
+    const { templateData, templateName, id } = req.body;
+    console.log('保存模版：', templateData, templateName, id)
     // 验证必填字段
     if (!templateData) {
       return res.status(400).json({ error: '模板数据不能为空' });
+    }
+
+    // 验证必须包含id字段（可以在外层或templateData内层）
+    const templateId = id || (typeof templateData === 'object' && templateData.id);
+    if (!templateId) {
+      return res.status(400).json({ error: '必须提供id字段' });
     }
 
     // 验证JSON格式
@@ -398,46 +400,81 @@ app.post('/template', (req, res) => {
       return res.status(400).json({ error: '模板数据大小不能超过1MB' });
     }
 
-    // 生成文件名和ID
     const now = new Date();
-    const dateStr = now.getFullYear().toString() + 
-                   (now.getMonth() + 1).toString().padStart(2, '0') + 
-                   now.getDate().toString().padStart(2, '0') + '_' +
-                   now.getHours().toString().padStart(2, '0') + 
-                   now.getMinutes().toString().padStart(2, '0') + 
-                   now.getSeconds().toString().padStart(2, '0');
-    
-    const templateId = generateTemplateId();
-    const defaultName = templateName || `template_${dateStr}`;
     const fileName = `${templateId}.json`;
     const filePath = path.join(templatesDir, fileName);
 
-    // 准备保存的数据
-    const templateInfo = {
-      id: templateId,
-      name: defaultName,
-      data: parsedData,
-      createTime: now.toISOString(),
-      updateTime: now.toISOString(),
-      size: dataSize
-    };
+    // 检查本地文件是否存在，决定是新增还是更新
+    if (fs.existsSync(filePath)) {
+      // 更新现有模板
+      // 读取现有模板信息
+      const fileContent = fs.readFileSync(filePath, 'utf8');
+      const existingTemplate = JSON.parse(fileContent);
 
-    // 保存文件
-    fs.writeFileSync(filePath, JSON.stringify(templateInfo, null, 2), 'utf8');
+      // 更新模板数据
+      const updatedTemplate = {
+        ...existingTemplate,
+        name: templateName || existingTemplate.name,
+        data: parsedData,
+        updateTime: now.toISOString(),
+        size: dataSize
+      };
 
-    res.json({
-      message: '模板保存成功',
-      template: {
+      // 保存文件
+      fs.writeFileSync(filePath, JSON.stringify(updatedTemplate, null, 2), 'utf8');
+
+      res.json({
+        message: '模板更新成功',
+        template: {
+          id: updatedTemplate.id,
+          name: updatedTemplate.name,
+          createTime: updatedTemplate.createTime,
+          updateTime: updatedTemplate.updateTime,
+          size: dataSize
+        },
+        action: 'update'
+      });
+
+    } else {
+      // 新增模板
+      const dateStr = now.getFullYear().toString() +
+        (now.getMonth() + 1).toString().padStart(2, '0') +
+        now.getDate().toString().padStart(2, '0') + '_' +
+        now.getHours().toString().padStart(2, '0') +
+        now.getMinutes().toString().padStart(2, '0') +
+        now.getSeconds().toString().padStart(2, '0');
+
+      const defaultName = templateName || `template_${dateStr}`;
+
+      // 准备保存的数据
+      const templateInfo = {
         id: templateId,
         name: defaultName,
-        createTime: templateInfo.createTime,
+        data: parsedData,
+        createTime: now.toISOString(),
+        updateTime: now.toISOString(),
         size: dataSize
-      }
-    });
+      };
+
+      // 保存文件
+      fs.writeFileSync(filePath, JSON.stringify(templateInfo, null, 2), 'utf8');
+
+      res.json({
+        message: '模板保存成功',
+        template: {
+          id: templateId,
+          name: defaultName,
+          createTime: templateInfo.createTime,
+          updateTime: templateInfo.updateTime,
+          size: dataSize
+        },
+        action: 'create'
+      });
+    }
 
   } catch (error) {
-    console.error('模板保存失败:', error);
-    res.status(500).json({ error: '模板保存失败: ' + error.message });
+    console.error('模板操作失败:', error);
+    res.status(500).json({ error: '服务器内部错误' });
   }
 });
 
@@ -448,11 +485,11 @@ app.get('/template/list', (req, res) => {
       .filter(file => file.endsWith('.json'))
       .map(filename => {
         const filePath = path.join(templatesDir, filename);
-        
+
         try {
           const fileContent = fs.readFileSync(filePath, 'utf8');
           const templateInfo = JSON.parse(fileContent);
-          
+
           return {
             id: templateInfo.id,
             name: templateInfo.name,
@@ -494,74 +531,12 @@ app.get('/template/:id', (req, res) => {
       data: templateInfo.data,
       createTime: templateInfo.createTime,
       updateTime: templateInfo.updateTime,
-      size: templateInfo.size
+      size: templateInfo.size,
+      release: templateInfo.release
     });
 
   } catch (error) {
     res.status(500).json({ error: '获取模板数据失败: ' + error.message });
-  }
-});
-
-// 编辑模板数据接口
-app.put('/template/:id', (req, res) => {
-  try {
-    const templateId = req.params.id;
-    const { templateData } = req.body;
-    const fileName = `${templateId}.json`;
-    const filePath = path.join(templatesDir, fileName);
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: '模板不存在' });
-    }
-
-    // 验证必填字段
-    if (!templateData) {
-      return res.status(400).json({ error: '模板数据不能为空' });
-    }
-
-    // 验证JSON格式
-    let parsedData;
-    try {
-      if (typeof templateData === 'string') {
-        parsedData = JSON.parse(templateData);
-      } else {
-        parsedData = templateData;
-      }
-    } catch (e) {
-      return res.status(400).json({ error: '模板数据必须是有效的JSON格式' });
-    }
-
-    // 检查数据大小（1MB限制）
-    const dataSize = Buffer.byteLength(JSON.stringify(parsedData), 'utf8');
-    if (dataSize > 1024 * 1024) {
-      return res.status(400).json({ error: '模板数据大小不能超过1MB' });
-    }
-
-    // 读取现有模板信息
-    const fileContent = fs.readFileSync(filePath, 'utf8');
-    const templateInfo = JSON.parse(fileContent);
-
-    // 更新模板数据
-    templateInfo.data = parsedData;
-    templateInfo.updateTime = new Date().toISOString();
-    templateInfo.size = dataSize;
-
-    // 保存文件
-    fs.writeFileSync(filePath, JSON.stringify(templateInfo, null, 2), 'utf8');
-
-    res.json({
-      message: '模板更新成功',
-      template: {
-        id: templateInfo.id,
-        name: templateInfo.name,
-        updateTime: templateInfo.updateTime,
-        size: dataSize
-      }
-    });
-
-  } catch (error) {
-    console.error('模板更新失败:', error);
-    res.status(500).json({ error: '模板更新失败: ' + error.message });
   }
 });
 
@@ -646,8 +621,8 @@ app.use((error, req, res, next) => {
 
 // 健康检查接口
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     memory: process.memoryUsage(),
@@ -660,7 +635,7 @@ app.get('/health', (req, res) => {
 // 服务器信息接口
 app.get('/info', (req, res) => {
   const packageInfo = require('./package.json');
-  
+
   res.json({
     name: packageInfo.name,
     version: packageInfo.version,
